@@ -1,0 +1,33 @@
+# ── Secrets & sensitive ──
+.env
+.env.*
+.dev.vars
+*.pem
+*.key
+secrets.*
+credentials*
+
+# ── Dependencies ──
+node_modules/
+
+# ── Build output ──
+dist/
+build/
+out/
+
+# ── Logs ──
+*.log
+npm-debug.log*
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+
+# ── IDE ──
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Wrangler ──
+.wrangler/
