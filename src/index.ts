@@ -20,7 +20,7 @@ app.post('/api/auth/session', async (c) => {
     }
 
     const db = new DB(c.env);
-    const rows = await db.db.prepare("SELECT id, email, name, team FROM users WHERE email = ? AND active = 1").bind(email).first<{ id: string; email: string; name: string; team: string }>();
+    const rows = await db.db.prepare("SELECT id, email, name, team FROM users WHERE LOWER(email) = LOWER(?) AND active = 1").bind(email).first<{ id: string; email: string; name: string; team: string }>();
     if (!rows) {
       return c.json({ authenticated: false, devMode: false, error: 'user not found' }, 401);
     }
