@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env } from './types';
 import { DB } from './db';
-import { hashPassword, verifyPassword, generateToken, verifyToken, generateKeyCode, generateChallenge, signChallenge, verifyChallenge } from './crypto';
+import { hashPassword, verifyPassword, generateToken, generateSessionToken, verifyToken, generateKeyCode, generateChallenge, signChallenge, verifyChallenge } from './crypto';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: any } }>();
 
@@ -10,6 +10,67 @@ app.use('/*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'OPTIONS'], allo
 
 // ── Health check ──
 app.get('/api/health', (c) => c.json({ status: 'ok', service: 'dealmaker-api' }));
+
+// ── Session endpoints ──
+app.post('/api/auth/session', async (c) => {
+  try {
+    const { email } = await c.req.json();
+    if (!email) {
+      return c.json({ authenticated: false, devMode: false, error: 'email required' }, 400);
+    }
+
+    const db = new DB(c.env);
+    const rows = await db.db.prepare("SELECT id, email, name, team FROM users WHERE email = ? AND active = 1").bind(email).first<{ id: string; email: string; name: string; team: string }>();
+    if (!rows) {
+      return c.json({ authenticated: false, devMode: false, error: 'user not found' }, 401);
+    }
+
+    const sessionUser = {
+      id: rows.id,
+      organizationId: 'org_demo',
+      organizationName: 'DealMaker Demo',
+      email: rows.email,
+      name: rows.name,
+      team: rows.team as 'sales' | 'business',
+      canApproveHighRisk: rows.team === 'business',
+    };
+    const token = await generateSessionToken(sessionUser, c.env);
+    return c.json({ authenticated: true, user: sessionUser, devMode: false, token });
+  } catch (e: any) {
+    return c.json({ authenticated: false, devMode: false, error: e?.message || 'login failed' }, 500);
+  }
+});
+
+app.get('/api/auth/session', async (c) => {
+  const auth = c.req.header('Authorization');
+  if (!auth?.startsWith('Bearer ')) {
+    return c.json({ authenticated: false, devMode: false });
+  }
+  const payload = await verifyToken(auth.slice(7), c.env);
+  if (!payload) {
+    return c.json({ authenticated: false, devMode: false });
+  }
+  const team = payload.role === 'admin' ? 'business' : (payload.role || 'sales');
+  const user = {
+    id: String(payload.id),
+    organizationId: 'org_demo',
+    organizationName: 'DealMaker Demo',
+    email: payload.email,
+    name: payload.name,
+    team,
+    canApproveHighRisk: team === 'business',
+  };
+  return c.json({ authenticated: true, user, devMode: true });
+});
+
+app.delete('/api/auth/session', async (c) => {
+  return c.json({ authenticated: false, devMode: false });
+});
+
+// ── Deals (stub — returns empty list for now) ──
+app.get('/api/deals', async (c) => {
+  return c.json({ deals: [] });
+});
 
 // ── Get a signed challenge token (crypto-based, no DB needed) ──
 app.post('/api/auth/challenge', async (c) => {

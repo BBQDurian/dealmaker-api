@@ -46,21 +46,29 @@ export async function verifyPassword(password: string, stored: string): Promise<
 }
 
 export async function generateToken(user: UserWithoutPassword, env: Env): Promise<string> {
+  return generateJWT({ sub: String(user.id), email: user.email, name: user.name, role: user.role }, env);
+}
+
+export async function generateSessionToken(user: { id: string; email: string; name: string; team: string }, env: Env): Promise<string> {
+  return generateJWT({ sub: user.id, email: user.email, name: user.name, role: user.team }, env);
+}
+
+async function generateJWT(payload: { sub: string; email: string; name: string; role: string }, env: Env): Promise<string> {
   const header = base64UrlEncode(new TextEncoder().encode(JSON.stringify({ alg: 'HS256', typ: 'JWT' })));
-  const payload = base64UrlEncode(
+  const body = base64UrlEncode(
     new TextEncoder().encode(
       JSON.stringify({
-        sub: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
+        sub: payload.sub,
+        email: payload.email,
+        name: payload.name,
+        role: payload.role,
         iat: Math.floor(Date.now() / 1000),
         exp: Math.floor(Date.now() / 1000) + 7 * 24 * 3600,
       })
     )
   );
-  const signature = await signJWT(`${header}.${payload}`, env.JWT_SECRET);
-  return `${header}.${payload}.${signature}`;
+  const signature = await signJWT(`${header}.${body}`, env.JWT_SECRET);
+  return `${header}.${body}.${signature}`;
 }
 
 async function signJWT(data: string, secret: string): Promise<string> {
@@ -75,7 +83,7 @@ async function signJWT(data: string, secret: string): Promise<string> {
   return base64UrlEncode(sig);
 }
 
-export async function verifyToken(token: string, env: Env): Promise<UserWithoutPassword | null> {
+export async function verifyToken(token: string, env: Env): Promise<any | null> {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
@@ -86,7 +94,7 @@ export async function verifyToken(token: string, env: Env): Promise<UserWithoutP
     const payload = JSON.parse(new TextDecoder().decode(base64UrlDecode(parts[1])));
     if (payload.exp < Math.floor(Date.now() / 1000)) return null;
 
-    return { id: payload.sub, email: payload.email, name: payload.name || '', role: payload.role } as UserWithoutPassword;
+    return { id: payload.sub, email: payload.email, name: payload.name || '', role: payload.role };
   } catch {
     return null;
   }
